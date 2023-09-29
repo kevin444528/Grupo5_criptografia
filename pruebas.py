@@ -37,3 +37,5 @@ try:
 except cryptography.exceptions.InvalidKey as e:
     # Manejar la excepción InvalidKey y mostrar un mensaje personalizado
     print(f"Error: {e}")  # Imprimir un mensaje personalizado
+else:
+    print("Contraseña valida")
