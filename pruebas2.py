@@ -6,7 +6,7 @@ aad = b"DNI"
 key = AESGCM.generate_key(bit_length=128)
 aesgcm = AESGCM(key)
 nonce = os.urandom(12)
-ct = aesgcm.encrypt(nonce, b"data", aad)
+ct = aesgcm.encrypt(nonce, data.encode(), aad)
 voto = aesgcm.decrypt(nonce, ct, aad)
 print(voto.decode())
 
