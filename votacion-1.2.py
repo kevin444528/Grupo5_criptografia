@@ -9,7 +9,6 @@ class AplicacionRegistro:
     def __init__(self, ventana):
         self.ventana = ventana
         self.ventana.title("Aplicación de Inicio de Sesión")
-
         self.dni_label = tk.Label(ventana, text="DNI:")
         self.dni_entry = tk.Entry(ventana)
         self.contrasena_label = tk.Label(ventana, text="Contraseña:")
