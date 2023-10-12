@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 def addto_csv(nuevo_usuario):
     # nueva_fila = ["Elena", 28, "Barranquilla"]
-
+    
     # Abre el archivo CSV en modo "append" ('a')
     with open('basedatos.csv', mode='a', newline='') as archivo_csv:
         # Crea un objeto escritor de CSV
