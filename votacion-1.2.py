@@ -5,9 +5,12 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 class AplicacionRegistro:
     def __init__(self, ventana):
+        self.nombre_basedatos='basedatos.csv'
+        self.nombre_basedatos_key='base_datos_key.csv'
         self.ventana = ventana
         self.ventana.title("Aplicación de Inicio de Sesión")
         self.dni_label = tk.Label(ventana, text="DNI:")
@@ -30,7 +33,7 @@ class AplicacionRegistro:
         dni = self.dni_entry.get()
         contrasena = self.contrasena_entry.get()
         # Agrega la lógica de inicio de sesión aquí.
-        usuario = self.buscar_usuario(dni)
+        usuario = self.buscar_usuario(self.nombre_basedatos,dni)
         if usuario is not None:
             con_by = bytes.fromhex(usuario[1])
             salt_by= bytes.fromhex(usuario[2])
@@ -110,22 +113,21 @@ class AplicacionRegistro:
     def ver_datos(self):
         self.ventana_datos = tk.Toplevel(self.ventana)
         self.ventana_datos.title("Registro")
+        print(self.dni_entry.get())
         # para hacer esto de alguna forma hay que pasarle el dni a esta función
         self.nombre_label = tk.Label(self.ventana_datos, text="Nombre:")
         self.apellido_label = tk.Label(self.ventana_datos, text="Apellido:")
         self.fecha_label = tk.Label(self.ventana_datos, text="Fecha:")
 
-    def buscar_usuario(self, dni):
-        with open('basedatos.csv', mode='r') as archivo_csv:
+    def buscar_usuario(self, fichero,dni):
+        with open(fichero, mode='r') as archivo_csv:
             lector_csv = csv.reader(archivo_csv)
             for fila in lector_csv:
                 if fila and fila[0] == dni:
                     return fila
 
-    def addto_csv(self,nuevo_usuario):
-    # nueva_fila = ["Elena", 28, "Barranquilla"]
-    # Abre el archivo CSV en modo "append" ('a')
-        with open('basedatos.csv', mode='a', newline='') as archivo_csv:
+    def addto_csv(self,fichero,nuevo_usuario):
+        with open(fichero, mode='a', newline='') as archivo_csv:
             # Crea un objeto escritor de CSV
             escritor_csv = csv.writer(archivo_csv)
             # Escribe la nueva fila en el archivo CSV
@@ -164,27 +166,36 @@ class AplicacionRegistro:
         key = kdf.derive(clave_bytes)
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return key, salt
-
-    def encriptar(self, data, dni):
+    def derivar_clave(self,salt):
+        # derive
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=480000,
+        )
+        clave = self.contrasena_entry.get()
+        clave_bytes = clave.encode('utf-8')
+        key = kdf.derive(clave_bytes)
+        return key
+    def encriptar(self, data,salt):
         algoritmo = "AES"
         data_b = data.encode('utf-8')
         # usamos el dni como el dato autenticado pero no encriptado, porque sabemos que pertence al usuario pero no está encriptado
-        dni_b = dni.encode('utf-8')
-        key_length = 128
-        key = AESGCM.generate_key(bit_length=key_length)
+        key= self.derivar_clave(salt)
+        key_length = len(key)
         aesgcm = AESGCM(key)
         nonce = os.urandom(12)
         # nos devuelve el dato encriptado y autenticado
-        ct = aesgcm.encrypt(nonce, data_b, dni_b)
+        ct = aesgcm.encrypt(nonce, data_b, None)
         # imprimimos mensaje de depuración:
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return ct, nonce
 
-    def desencriptar(self, ct, nonce, dni):
+    def desencriptar(self, ct, nonce, dni,key):
         algoritmo = "AES"
         dni_b = dni.encode('utf-8')
         key_length = 128
-        key = AESGCM.generate_key(bit_length=key_length)
         aesgcm = AESGCM(key)
         dato = aesgcm.decrypt(nonce, ct, dni_b)
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
@@ -241,11 +252,11 @@ class AplicacionRegistro:
             salt_hex = salt.hex()
             # al registrar al usuario ciframos los datos de nombre, apellido y fecha de nacimiento usando el dni
             # guarda el dato encriptado y seguidamente el nonce
-            nombre_encr, nonce_nombre = self.encriptar(nombre, dni)
-            apellido_encr, nonce_apellido = self.encriptar(apellido, dni)
-            fecha_encr, nonce_fecha = self.encriptar(fecha_nacimiento, dni)
+            nombre_encr, nonce_nombre = self.encriptar(nombre, salt)
+            apellido_encr, nonce_apellido = self.encriptar(apellido, salt)
+            fecha_encr, nonce_fecha = self.encriptar(fecha_nacimiento, salt)
             n_usuario = [dni, con_cifrada_hex, salt_hex, nombre_encr.hex(), nonce_nombre.hex(), apellido_encr.hex(), nonce_apellido.hex(), fecha_encr.hex(), nonce_fecha.hex()]
-            self.addto_csv(n_usuario)
+            self.addto_csv(self.nombre_basedatos,n_usuario)
             self.ventana_registro.destroy()
 
 
