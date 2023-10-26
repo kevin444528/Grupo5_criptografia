@@ -11,13 +11,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 class AplicacionRegistro:
     def __init__(self, ventana):
         self.nombre_basedatos='basedatos.csv'
-        self.nombre_basedatos_key='base_datos_key.csv'
-        """nombre_col = ["dni", "con_cifrada", "salt", "nombre_encr", "nonce_nombre", "apellido_encr", "nonce_apellido",
-                      "fecha_encr", "nonce_fecha", "voto", "nonce_voto"]"""
-        self.base_panda=pd.read_csv("basedatos.csv")
-        self.base_panda["voto"] = self.base_panda["voto"].astype(object)
-        self.base_panda["nonce_voto"] = self.base_panda["nonce_voto"].astype(object)
-        print(self.base_panda.dtypes)
+        self.base_panda=pd.read_csv(self.nombre_basedatos)
         self.ventana = ventana
         self.ventana.title("Aplicación de Inicio de Sesión")
         self.dni_label = tk.Label(ventana, text="DNI:")
@@ -91,7 +85,7 @@ class AplicacionRegistro:
             return True
 
     def mostrar_ventana_votacion(self):
-        self.ventana_votacion = tk.Toplevel(self.ventana)
+        self.ventana_votacion = tk.Toplevel()
         self.ventana_votacion.title("Votación")
         verdatos = tk.Button(self.ventana_votacion, text="Mis datos", command=self.ver_datos)
         # Agrega botones para votar en esta ventana
@@ -102,10 +96,10 @@ class AplicacionRegistro:
 
         verdatos.grid(row=1, column=1, columnspan=2)
 
-        boton_opcion1.grid(row=3, column=1, columnspan = 2)
-        boton_opcion2.grid(row=4, column=1, columnspan = 2)
-        boton_opcion3.grid(row=5, column=1, columnspan = 2)
-        boton_opcion4.grid(row=6, column=1, columnspan = 2)
+        boton_opcion1.grid(row=3, column=1, columnspan=2)
+        boton_opcion2.grid(row=4, column=1, columnspan=2)
+        boton_opcion3.grid(row=5, column=1, columnspan=2)
+        boton_opcion4.grid(row=6, column=1, columnspan=2)
 
     def votar(self,opcion):
         self.base_panda=pd.read_csv("basedatos.csv")
@@ -138,17 +132,16 @@ class AplicacionRegistro:
         else:
             voto=self.desencriptar(bytes.fromhex(usuario[9]), bytes.fromhex(usuario[10]), bytes.fromhex(usuario[2]))
         # para hacer esto de alguna forma hay que pasarle el dni a esta función
-        self.nombre_label = tk.Label(self.ventana_datos, text=f"Nombre: {nombre}")
-        self.apellido_label = tk.Label(self.ventana_datos, text=f"Apellido:{apellido}")
-        self.fecha_label = tk.Label(self.ventana_datos, text=f"Fecha de nacimiento:{fecha}")
-        self.voto_label = tk.Label(self.ventana_datos, text=f"Voto: {voto}")
+        nombre_label = tk.Label(self.ventana_datos, text=f"Nombre: {nombre}")
+        apellido_label = tk.Label(self.ventana_datos, text=f"Apellido:{apellido}")
+        fecha_label = tk.Label(self.ventana_datos, text=f"Fecha de nacimiento:{fecha}")
+        voto_label = tk.Label(self.ventana_datos, text=f"Voto: {voto}")
 
 
-
-        self.nombre_label.pack()
-        self.apellido_label.pack()
-        self.fecha_label.pack()
-        self.voto_label.pack()
+        nombre_label.pack()
+        apellido_label.pack()
+        fecha_label.pack()
+        voto_label.pack()
 
 
     def buscar_usuario(self, fichero,dni):
@@ -229,7 +222,6 @@ class AplicacionRegistro:
     def desencriptar(self, ct, nonce,salt):
         algoritmo = "AES"
         key = self.derivar_clave(salt)
-        print("contraseña desencrip: ",key)
         key_length = len(key)
         aesgcm = AESGCM(key)
         dato = aesgcm.decrypt(nonce, ct, None)
@@ -257,7 +249,7 @@ class AplicacionRegistro:
         self.registrar_button = tk.Button(self.ventana_registro, text="Registrarse", command=self.registrar_usuario)
         self.registrar_button.grid(row=10, column=0, columnspan=2)
 
-        self.volver_button = tk.Button(self.ventana_registro, text="Volver", command=self.ventana)
+        self.volver_button = tk.Button(self.ventana_registro, text="Volver", command= lambda :self.ventana_registro.destroy())
         self.volver_button.grid(row=11, column=0, columnspan=2)
 
         self.nombre_label.grid(row=0, column=0)
