@@ -256,6 +256,15 @@ class AplicacionRegistro:
         dato = aesgcm.decrypt(nonce, ct, None)
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return dato.decode()
+    def firmar(self):
+        pass
+    def ver_firmar(self):
+        pass
+
+    def crear_clave_publica(self):
+        pass
+    def crear_clave_privada(self):
+        pass
 
     def abrir_ventana_registro(self):
         """Interfaz de la ventana de registro de usuario"""
