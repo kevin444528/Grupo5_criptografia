@@ -49,7 +49,7 @@ class AplicacionRegistro:
             #Comprueba la contraseña con el hash que tenemos guardado
             validez = self.verificar_clave(contrasena, con_by, salt_by)
             if validez:
-                self.mostrar_ventana_votacion()
+                self.mostrar_ventana_principal()
                 self.clave=contrasena
                 self.mostrar_error("")
             else:
@@ -97,18 +97,26 @@ class AplicacionRegistro:
             self.contrasena_mensaje_error.config(text="")
             return True
 
-    def mostrar_ventana_votacion(self):
-        """Interfaz de la ventana de votacion. Que se muestra despues de iniciar sesion"""
-        self.ventana_votacion = tk.Toplevel()
-        self.ventana_votacion.title("Votación")
-        verdatos = tk.Button(self.ventana_votacion, text="Mis datos", command=self.ver_datos)
+    def mostrar_ventana_principal(self):
+        """Interfaz de la ventana principal de la aplicación. Se muestra después de iniciar sesion"""
+        self.ventana_principal = tk.Toplevel()
+        self.ventana_principal.title("Votación")
+        verdatos = tk.Button(self.ventana_principal, text="Mis datos", command=self.ver_datos)
         # Llaman a la funcion votar pasandole como parametro la eleccion
-        boton_opcion1 = tk.Button(self.ventana_votacion, text="Opción 1", command=lambda: self.votar(1))
-        boton_opcion2 = tk.Button(self.ventana_votacion, text="Opción 2", command=lambda:self.votar(2))
-        boton_opcion3 = tk.Button(self.ventana_votacion, text="Opción 3", command=lambda: self.votar(3))
-        boton_opcion4 = tk.Button(self.ventana_votacion, text="Opción 4", command=lambda: self.votar(4))
+        vervotos = tk.Button(self.ventana_principal, text="Votar", command=self.ver_votos)
+        # self.vervotos_mensaje = tk.Label(self.ventana_principal, text="")
+        verdatos.grid(row=1, column=2, columnspan=2, pady=(10, 10), padx=(10, 10))
+        vervotos.grid(row=6, column=2, columnspan=2, pady=(10, 10), padx=(10, 10))
+        # self.vervotos_mensaje.grid(row=7, column=2, columnspan=2)
 
-        verdatos.grid(row=1, column=1, columnspan=2)
+    def ver_votos(self):
+        """Interfaz de la ventana de votación"""
+        self.ventana_votos = tk.Toplevel(self.ventana)
+        self.ventana_votos.title("Votación")
+        boton_opcion1 = tk.Button(self.ventana_votos, text="Opción 1", command=lambda: self.votar(1))
+        boton_opcion2 = tk.Button(self.ventana_votos, text="Opción 2", command=lambda: self.votar(2))
+        boton_opcion3 = tk.Button(self.ventana_votos, text="Opción 3", command=lambda: self.votar(3))
+        boton_opcion4 = tk.Button(self.ventana_votos, text="Opción 4", command=lambda: self.votar(4))
 
         boton_opcion1.grid(row=3, column=1, columnspan=2)
         boton_opcion2.grid(row=4, column=1, columnspan=2)
@@ -131,9 +139,10 @@ class AplicacionRegistro:
         self.base_panda.loc[self.base_panda["dni"] == self.dni_entry.get(), "nonce_voto"] = nonce_voto_str
         #Añadimos las modificaciones al fichero
         self.base_panda.to_csv("basedatos.csv", index=False)
+        self.ventana_votos.destroy()
 
     def ver_datos(self):
-        """Interfaz de la ventaa datos"""
+        """Interfaz de la ventana datos"""
         self.ventana_datos = tk.Toplevel(self.ventana)
         self.ventana_datos.title("Mis datos")
         titulo_label = tk.Label(self.ventana_datos, text="Datos", font=("bold", 14))
@@ -179,7 +188,7 @@ class AplicacionRegistro:
 
 
     def verificar_clave(self, intento, key, salt):
-        """Verifica una clave cifrada con Scrypt. Intento es la clave con la que se esta intentando entra
+        """Verifica una clave cifrada con Scrypt. Intento es la clave con la que se esta intentando
         entrar a la cuenta de usuario y key es la contraseña cifrada guardada"""
 
         algoritmo = "Scrypt"
@@ -231,7 +240,7 @@ class AplicacionRegistro:
         key = kdf.derive(clave_bytes)
         return key
     def encriptar(self, data,salt):
-        """Encripta datos con un salt paasado como parametro"""
+        """Encripta datos con un salt pasado como parametro"""
         algoritmo = "AES"
         #Transformamos los datos en cadena de bits
         data_b = data.encode('utf-8')
@@ -247,7 +256,7 @@ class AplicacionRegistro:
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return ct, nonce
 
-    def desencriptar(self, ct, nonce,salt):
+    def desencriptar(self, ct, nonce, salt):
         """Desencripta datos con un determinado nonce y salt"""
         algoritmo = "AES"
         key = self.derivar_clave(salt)
