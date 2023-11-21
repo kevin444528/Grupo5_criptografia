@@ -7,6 +7,9 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 class AplicacionRegistro:
     def __init__(self, ventana):
@@ -129,7 +132,7 @@ class AplicacionRegistro:
         voto= "Opcion: "+ str(opcion)
         #Buscamos el usuario en la base de datos
         usuario= self.base_panda.loc[self.base_panda["dni"]==self.dni_entry.get()]
-        salt= bytes.fromhex(usuario["salt"].iloc[0])
+        salt = bytes.fromhex(usuario["salt"].iloc[0])
         #Encripatmos el voto
         voto_cif, nonce_voto = self.encriptar(voto,salt)
         voto_cif_str = voto_cif.hex()
@@ -153,7 +156,7 @@ class AplicacionRegistro:
         apellido = self.desencriptar(bytes.fromhex(usuario[5]), bytes.fromhex(usuario[6]), bytes.fromhex(usuario[2]))
         fecha = self.desencriptar(bytes.fromhex(usuario[7]), bytes.fromhex(usuario[8]), bytes.fromhex(usuario[2]))
         #Comprueba si el usuario ha votado
-        if usuario[9] =="":
+        if usuario[9] == "":
             voto = "aun no ha votado"
         else:
             voto=self.desencriptar(bytes.fromhex(usuario[9]), bytes.fromhex(usuario[10]), bytes.fromhex(usuario[2]))
@@ -227,6 +230,7 @@ class AplicacionRegistro:
         key = kdf.derive(clave_bytes)
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return key, salt
+
     def derivar_clave(self,salt):
         """Deriva la clave actual"""
         kdf = PBKDF2HMAC(
@@ -239,6 +243,7 @@ class AplicacionRegistro:
         clave_bytes = clave.encode('utf-8')
         key = kdf.derive(clave_bytes)
         return key
+
     def encriptar(self, data,salt):
         """Encripta datos con un salt pasado como parametro"""
         algoritmo = "AES"
@@ -265,15 +270,84 @@ class AplicacionRegistro:
         dato = aesgcm.decrypt(nonce, ct, None)
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return dato.decode()
-    def firmar(self):
-        pass
-    def ver_firmar(self):
+
+    def firmar(self, voto, key):
+        """Función para firmar con la clave privada"""
+        # La clave privada se encuentra en un fichero .pem -> la buscamos (key loading)
+        dni = self.dni_entry.get()
+        # arreglar el "path to key" y buscar el fichero por dni del usuario
+        # password sería la clave privada del maestro??? habría que pasarla en bytes
+        with open("path/to/key.pem", "rb") as key_file:
+            private_key = serialization.load_pem_private_key(
+                key_file.read(),
+                password=None,
+            )
+        # generamos la clave pública a partir de la contraseña de (?)
+        public_key = self.crear_clave_publica(private_key)
+        # ciframos asimétricamente el voto con la clave pública
+        voto_cifrado = self.cifrar_asi(voto, public_key)
+        # el voto cifrado se firma con la clave privada
+        voto_cifr_firm = private_key.sign(
+            voto_cifrado,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return voto_cifr_firm
+
+    def cifrar_asi(self, voto, public_key):
+        """Función que cifra asimetricamente el voto con la clave pública"""
+        voto_cifrado = public_key.encrypt(
+            voto,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return voto_cifrado
+
+    def descifrar_asi(self, voto_cifrado, public_key):
+        """Función que recibe un voto cifrado y lo descifra utilizando la clave pública"""
         pass
 
-    def crear_clave_publica(self):
-        pass
+    def ver_firmar(self, voto_cifr_firm, private_key):
+        """Función que recibe un voto cifrado y firmado y comprueba la firma, devolviendo únicamente el voto cifrado"""
+        voto_cifrado = private_key.decrypt(
+            voto_cifr_firm,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+                )
+            )
+        return voto_cifrado
+
+    def crear_clave_publica(self, key):
+        """Función que genera una clave pública y otra privada para la firma de cada usuario"""
+        public_key = key.public_key()
+        return public_key
+
     def crear_clave_privada(self):
-        pass
+        """Función que genera la clave privada"""
+        #Generamos la clave privada aleatoria para un usuario
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+        #La almacenamos en un fichero .pem para cada usuario. El nombre del archivo es <dni>.pem
+        # hay tres tipos -> decidir cuál vamos a usar; este es el primero
+        pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.BestAvailableEncryption(b'mypassword')
+        )
+        pem.splitlines()[0]
+        b'-----BEGIN ENCRYPTED PRIVATE KEY-----'
+
+        return private_key
 
     def abrir_ventana_registro(self):
         """Interfaz de la ventana de registro de usuario"""
