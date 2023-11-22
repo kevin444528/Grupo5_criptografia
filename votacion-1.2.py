@@ -131,12 +131,17 @@ class AplicacionRegistro:
         self.base_panda=pd.read_csv("basedatos.csv")
         voto= "Opcion: "+ str(opcion)
         #Buscamos el usuario en la base de datos
-        usuario= self.base_panda.loc[self.base_panda["dni"]==self.dni_entry.get()]
+        dni = self.dni_entry.get()
+        usuario= self.base_panda.loc[self.base_panda["dni"]==dni]
         salt = bytes.fromhex(usuario["salt"].iloc[0])
-        #Encripatmos el voto
+        #Encripatmos el voto simétricamente con AES
         voto_cif, nonce_voto = self.encriptar(voto,salt)
         voto_cif_str = voto_cif.hex()
         nonce_voto_str = nonce_voto.hex()
+        #encriptamos el voto asimétricamente con RSA
+        voto_cifr_firm = self.firmar(voto, dni)
+        public_key = self.crear_clave_publica()
+        voto_cif_asi = self.cifrar_asi(voto, )
         #Guardamos el voto cifrado con su nonce
         self.base_panda.loc[self.base_panda["dni"] == self.dni_entry.get(), "voto"] = voto_cif_str
         self.base_panda.loc[self.base_panda["dni"] == self.dni_entry.get(), "nonce_voto"] = nonce_voto_str
@@ -271,10 +276,9 @@ class AplicacionRegistro:
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return dato.decode()
 
-    def firmar(self, voto, key):
+    def firmar(self, voto, dni):
         """Función para firmar con la clave privada"""
         # La clave privada se encuentra en un fichero .pem -> la buscamos (key loading)
-        dni = self.dni_entry.get()
         # arreglar el "path to key" y buscar el fichero por dni del usuario
         # password sería la clave privada del maestro??? habría que pasarla en bytes
         with open("path/to/key.pem", "rb") as key_file:
@@ -396,13 +400,17 @@ class AplicacionRegistro:
         fecha_nacimiento = self.fecha_nacimiento_entry.get()
         dni = self.dni_registro_entry.get()
         contrasena = self.contrasena_registro_entry.get()
+        # se generan automáticamente las claves pública y privada
+        #  la segunda se guardará en un fichero .pem, pero esto se hace al generarse la clave en sí
+        # TODO: la primera se guardará en claves-publicas.csv
+        private_key = self.crear_clave_privada()
+        public_key = self.crear_clave_publica(private_key)
         #Hace comprobacione
         if nombre != "" and apellido != "" and self.comprobar_fecha() and self.comprobar_dni() and self.comprobar_contrasena():
             #Asigna la contraseña de registro al atributo clave para poder encriptar los datos antes de almacenarlos
             self.clave=contrasena
             #Cifra la clave
             con_cifrada, salt = self.cifrar_clave(self.clave)
-
             con_cifrada_hex = con_cifrada.hex()
             salt_hex = salt.hex()
             # al registrar al usuario ciframos los datos de nombre, apellido y fecha de nacimiento usando el dni
