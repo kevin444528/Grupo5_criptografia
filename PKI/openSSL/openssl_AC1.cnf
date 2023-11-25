@@ -34,7 +34,7 @@ default_ca	= CA_default		# The default ca section
 ####################################################################
 [ CA_default ]
 
-dir		= ./		# Where everything is kept
+dir		= ./PKI/AC1		# Where everything is kept
 certs		= $dir/certificados	# Where the issued certs are kept
 crl_dir		= $dir/crls		# Where the issued crl are kept
 database	= $dir/index.txt	# database index file.

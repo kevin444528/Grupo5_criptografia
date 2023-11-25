@@ -2,6 +2,7 @@ import tkinter as tk
 import pandas as pd
 import csv
 import os
+import subprocess
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
@@ -10,6 +11,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.backends import default_backend
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
 
 class AplicacionRegistro:
     def __init__(self, ventana):
@@ -334,13 +339,18 @@ class AplicacionRegistro:
         public_key = key.public_key()
         return public_key
 
-    def crear_clave_privada(self):
+    def crear_clave_privada(self,dni):
         """Función que genera la clave privada"""
         #Generamos la clave privada aleatoria para un usuario
         private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=2048,
         )
+        nombre_archivo = f"{dni}.pem"
+        directorio = "Usuarios"
+        nombre_dir = f"{dni}"
+        ruta_usuarios = os.path.join(os.getcwd(), directorio, nombre_dir)
+        ruta_completa = os.path.join(ruta_usuarios, nombre_archivo)
         #La almacenamos en un fichero .pem para cada usuario. El nombre del archivo es <dni>.pem
         # hay tres tipos -> decidir cuál vamos a usar; este es el primero
         pem = private_key.private_bytes(
@@ -348,10 +358,89 @@ class AplicacionRegistro:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.BestAvailableEncryption(b'mypassword')
         )
+        with open(ruta_completa, 'wb') as archivo_nuevo:
+            archivo_nuevo.write(pem)
+            print(f"Clave privada guardada en el nuevo archivo '{ruta_completa}'.")
         pem.splitlines()[0]
         b'-----BEGIN ENCRYPTED PRIVATE KEY-----'
 
         return private_key
+    def crear_directorio(self,dni):
+        nombre_dir=f"{dni}"
+        directorio = "Usuarios"
+        ruta_completa = os.path.abspath(os.path.join(directorio, nombre_dir))
+        os.mkdir(ruta_completa)
+
+    def generar_solicitud_certificado(self,dni):
+        nombre_archivo = f"{dni}.pem"
+        directorio = "Usuarios"
+        nombre_dir = f"{dni}"
+        ruta_usuarios = os.path.join(os.getcwd(), directorio, nombre_dir)
+        archivo_clave_privada=os.path.join(ruta_usuarios, nombre_archivo)
+        nombre_solicitud=f"{dni}req.pem"
+        archivo_solicitud=os.path.join(ruta_usuarios, nombre_solicitud)
+        with open(archivo_clave_privada, "rb") as f:
+            loaded_private_key = serialization.load_pem_private_key(
+                f.read(),
+                password=b"mypassword",  # Aquí puedes proporcionar la contraseña si la clave está cifrada
+                backend=default_backend()
+            )
+        # Generate a CSR
+        csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+            # Provide various details about who we are.
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "ES"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "MADRID"),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, "Madrid"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, f"{dni}"),
+            x509.NameAttribute(NameOID.COMMON_NAME, f"{dni}.com"),
+        ])).add_extension(
+            x509.SubjectAlternativeName([
+                # Describe what sites we want this certificate for.
+                x509.DNSName(f"{dni}.com"),
+                x509.DNSName(f"www.{dni}.com"),
+                x509.DNSName(f"subdomain.{dni}.com"),
+            ]),
+            critical=False,
+            # Sign the CSR with our private key.
+        ).sign(loaded_private_key, hashes.SHA256())
+        # Write our CSR out to disk.
+        with open(archivo_solicitud, "wb") as f:
+            f.write(csr.public_bytes(serialization.Encoding.PEM))
+        ruta_solicitud= os.path.join(os.getcwd(), "PKI", "AC1","solicitudes",nombre_solicitud)
+        with open(ruta_solicitud, "wb") as f:
+            f.write(csr.public_bytes(serialization.Encoding.PEM))
+
+    def generar_certificado(self,dni):
+        nombre_solicitud = f"{dni}req.pem"
+        ruta_solicitud= os.path.join(os.getcwd(), "PKI", "AC1","solicitudes",nombre_solicitud)
+        configuracion_openssl= os.path.join(os.getcwd(), "PKI", "openSSL", "openssl_AC1.cnf")
+        try:
+            # Construir el comando 'openssl ca'
+            comando = f"openssl ca -in {ruta_solicitud} -notext -config {configuracion_openssl}"
+            # Ejecutar el comando en el sistema operativo
+            resultado = subprocess.run(
+                comando,
+                shell=True,
+                input="marinakevin2023\ny\ny\n",
+                text=True,
+                capture_output=True,
+                check=True
+            )
+            # Imprimir la salida y el error
+            print("Salida del comando:")
+            print(resultado.stdout)
+
+            if resultado.stderr:
+                # Decodificar la salida de error si es bytes
+                error_message = resultado.stderr.decode() if isinstance(resultado.stderr, bytes) else resultado.stderr
+                print("Error del comando:")
+                print(error_message)
+
+            print("Ejecución de 'openssl ca' completada correctamente.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error al ejecutar el comando 'openssl ca': {e}")
+            print(f"Salida del comando: {e.stderr if e.stderr else 'No hay error'}")
+
 
     def abrir_ventana_registro(self):
         """Interfaz de la ventana de registro de usuario"""
@@ -401,10 +490,8 @@ class AplicacionRegistro:
         dni = self.dni_registro_entry.get()
         contrasena = self.contrasena_registro_entry.get()
         # se generan automáticamente las claves pública y privada
-        #  la segunda se guardará en un fichero .pem, pero esto se hace al generarse la clave en sí
+        # la segunda se guardará en un fichero .pem, pero esto se hace al generarse la clave en sí
         # TODO: la primera se guardará en claves-publicas.csv
-        private_key = self.crear_clave_privada()
-        public_key = self.crear_clave_publica(private_key)
         #Hace comprobacione
         if nombre != "" and apellido != "" and self.comprobar_fecha() and self.comprobar_dni() and self.comprobar_contrasena():
             #Asigna la contraseña de registro al atributo clave para poder encriptar los datos antes de almacenarlos
@@ -421,6 +508,10 @@ class AplicacionRegistro:
             #Lo guardamos en formato hexadecimal para que tenga una visibilidad mejor la base de datos
             n_usuario = [dni, con_cifrada_hex, salt_hex, nombre_encr.hex(), nonce_nombre.hex(), apellido_encr.hex(), nonce_apellido.hex(), fecha_encr.hex(), nonce_fecha.hex(),"",""]
             self.addto_csv(self.nombre_basedatos,n_usuario)
+            self.crear_directorio(dni)
+            private_key = self.crear_clave_privada(dni)
+            self.generar_solicitud_certificado(dni)
+            self.generar_certificado(dni)
             self.ventana_registro.destroy()
 
 
