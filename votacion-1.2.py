@@ -3,6 +3,8 @@ import pandas as pd
 import csv
 import os
 import subprocess
+import shutil
+import glob
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 import cryptography.exceptions
@@ -441,6 +443,30 @@ class AplicacionRegistro:
             print(f"Error al ejecutar el comando 'openssl ca': {e}")
             print(f"Salida del comando: {e.stderr if e.stderr else 'No hay error'}")
 
+    def copiar_ultimo_certificado(self,dni):
+        nombre_dir = f"{dni}"
+        directorio_origen = os.path.join(os.getcwd(), "PKI", "AC1", "nuevoscerts")
+        directorio_destino = os.path.join(os.getcwd(),"Usuarios",nombre_dir)
+        # Obtener la lista de archivos que coinciden con el patrón "*.pem"
+        archivos_pem = glob.glob(os.path.join(directorio_origen, '*.pem'))
+        if not archivos_pem:
+            print("No hay archivos PEM en el directorio de origen.")
+            return
+        # Ordenar la lista de archivos por fecha de modificación descendente
+        archivos_pem.sort(key=os.path.getmtime, reverse=True)
+        # Tomar el archivo más reciente
+        ultimo_certificado = archivos_pem[0]
+
+        # Obtener el nombre del archivo sin la ruta
+        nuevo_nombre= f"{dni}cert.pem"
+
+        # Construir la ruta de destino
+        ruta_destino = os.path.join(directorio_destino, nuevo_nombre)
+
+        # Copiar el archivo al directorio de destino
+        shutil.copy(ultimo_certificado, ruta_destino)
+        print(f"Certificado copiado a {ruta_destino}")
+
 
     def abrir_ventana_registro(self):
         """Interfaz de la ventana de registro de usuario"""
@@ -512,6 +538,7 @@ class AplicacionRegistro:
             private_key = self.crear_clave_privada(dni)
             self.generar_solicitud_certificado(dni)
             self.generar_certificado(dni)
+            self.copiar_ultimo_certificado(dni)
             self.ventana_registro.destroy()
 
 
