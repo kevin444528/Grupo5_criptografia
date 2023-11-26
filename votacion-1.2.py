@@ -19,7 +19,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import openssl
 from cryptography.x509 import load_pem_x509_certificate
-
+from tkinter import ttk
 
 
 class AplicacionRegistro:
@@ -63,9 +63,12 @@ class AplicacionRegistro:
             #Comprueba la contraseña con el hash que tenemos guardado
             validez = self.verificar_clave(contrasena, con_by, salt_by)
             if validez:
-                self.mostrar_ventana_principal()
-                self.clave=contrasena
-                self.mostrar_error("")
+                self.clave = contrasena
+                if dni!="00000000A":
+                    self.mostrar_ventana_principal()
+                    self.mostrar_error("")
+                else:
+                    self.mostrar_ventana_superuser()
             else:
                 self.mostrar_error("Contraseña incorrecta")
         else:
@@ -112,9 +115,35 @@ class AplicacionRegistro:
             return True
 
     def mostrar_ventana_superuser(self):
-        self.ventana_principal = tk.Toplevel()
-        self.ventana_principal.title("Ver votos")
+        self.ventana_sup= tk.Toplevel(self.ventana)
+        self.ventana_sup.title("Ver votos")
         base_votos= pd.read_csv("votos-usuarios.csv")
+        self.tree= ttk.Treeview(self.ventana_sup)
+        columna_mostrar= "dni"
+        # Configurar columnas
+        columnas_mostrar = ["dni", "voto"]  # Agrega "voto" a las columnas a mostrar
+        self.tree["columns"] = tuple(columnas_mostrar)
+
+        # Configurar encabezados y columnas
+        for columna in columnas_mostrar:
+            self.tree.heading("#0", text="", anchor=tk.CENTER)
+            self.tree.column("#0", width=0, stretch=tk.NO)
+            self.tree.heading(columna, text=columna)
+            self.tree.column(columna, anchor=tk.CENTER)
+
+
+        for index, row in base_votos.iterrows():
+            if (self.ver_firmar(row["dni"])):
+                voto_bytes = self.descifrar_asi(bytes.fromhex(row["voto_cif_asi"]))
+                voto = voto_bytes.decode()
+                self.tree.insert("", index, values=(row["dni"],voto))
+            else:
+                self.tree.insert("", index, values=(row["dni"], "voto no coincide con la firma"))
+
+        self.tree.pack(pady=10)
+
+
+
     def mostrar_ventana_principal(self):
         """Interfaz de la ventana principal de la aplicación. Se muestra después de iniciar sesion"""
         self.ventana_principal = tk.Toplevel()
@@ -371,7 +400,7 @@ class AplicacionRegistro:
 
     def ver_firmar(self,dni):
         """Función que recibe un usuario ,voto cifrado y cifrado-firmado y comprueba la firma"""
-        usuario= self.buscar_usuario("votos-usuarios",dni)
+        usuario= self.buscar_usuario("votos-usuarios.csv",dni)
         clave_publica= self.obtener_clave_publica(dni)
         try:
             clave_publica.verify(
