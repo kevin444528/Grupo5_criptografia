@@ -17,6 +17,10 @@ from cryptography.hazmat.backends import default_backend
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import openssl
+from cryptography.x509 import load_pem_x509_certificate
+
+
 
 class AplicacionRegistro:
     def __init__(self, ventana):
@@ -107,6 +111,10 @@ class AplicacionRegistro:
             self.contrasena_mensaje_error.config(text="")
             return True
 
+    def mostrar_ventana_superuser(self):
+        self.ventana_principal = tk.Toplevel()
+        self.ventana_principal.title("Ver votos")
+        base_votos= pd.read_csv("votos-usuarios.csv")
     def mostrar_ventana_principal(self):
         """Interfaz de la ventana principal de la aplicación. Se muestra después de iniciar sesion"""
         self.ventana_principal = tk.Toplevel()
@@ -136,6 +144,7 @@ class AplicacionRegistro:
     def votar(self,opcion):
         """Añade o actuliza el voto a la lista del usuario"""
         self.base_panda=pd.read_csv("basedatos.csv")
+        base_votos=pd.read_csv("votos-usuarios.csv")
         voto= "Opcion: "+ str(opcion)
         #Buscamos el usuario en la base de datos
         dni = self.dni_entry.get()
@@ -145,13 +154,23 @@ class AplicacionRegistro:
         voto_cif, nonce_voto = self.encriptar(voto,salt)
         voto_cif_str = voto_cif.hex()
         nonce_voto_str = nonce_voto.hex()
-        #encriptamos el voto asimétricamente con RSA
-        voto_cifr_firm = self.firmar(voto, dni)
-        public_key = self.crear_clave_publica()
-        voto_cif_asi = self.cifrar_asi(voto, )
+        #encriptamos el voto asimétricamente con RSA y firmamos
+        voto_cif_asi = self.cifrar_asi(voto)
+        voto_cif_asi_firmado= self.firmar(voto_cif_asi,dni)
         #Guardamos el voto cifrado con su nonce
         self.base_panda.loc[self.base_panda["dni"] == self.dni_entry.get(), "voto"] = voto_cif_str
         self.base_panda.loc[self.base_panda["dni"] == self.dni_entry.get(), "nonce_voto"] = nonce_voto_str
+        #Guardamos voto asimetrico junto con su version firmada
+        usu=base_votos.loc[base_votos["dni"]==dni]
+        if not usu.empty:
+            # Aquí realizas alguna acción si se encontró el usuario
+            base_votos.loc[base_votos["dni"]==dni,"voto_cif_asi"]= voto_cif_asi.hex()
+            base_votos.loc[base_votos["dni"] == dni, "voto_cif_asi_fir"] = voto_cif_asi_firmado.hex()
+            base_votos.to_csv("votos-usuarios.csv", index=False)
+        else:
+            # Aquí realizas alguna acción si el usuario no fue encontrado
+            usu_voto_nuevo=[dni,voto_cif_asi.hex(),voto_cif_asi_firmado.hex()]
+            self.addto_csv("votos-usuarios.csv",usu_voto_nuevo)
         #Añadimos las modificaciones al fichero
         self.base_panda.to_csv("basedatos.csv", index=False)
         self.ventana_votos.destroy()
@@ -283,20 +302,17 @@ class AplicacionRegistro:
         print(f"Información sobre el cifrado: \nEl algoritmo usado para cifrar es {algoritmo} y la longitud de la clave es {key_length}")
         return dato.decode()
 
-    def firmar(self, voto, dni):
+    def firmar(self, voto_cifrado, dni):
         """Función para firmar con la clave privada"""
         # La clave privada se encuentra en un fichero .pem -> la buscamos (key loading)
-        # arreglar el "path to key" y buscar el fichero por dni del usuario
-        # password sería la clave privada del maestro??? habría que pasarla en bytes
-        with open("path/to/key.pem", "rb") as key_file:
+        con_path = os.path.join(os.getcwd(), "Usuarios", f"{dni}", f"{dni}.pem")
+        with open(con_path, "rb") as key_file:
             private_key = serialization.load_pem_private_key(
                 key_file.read(),
-                password=None,
+                password=self.clave.encode('utf-8'),
+                backend=default_backend()
             )
-        # generamos la clave pública a partir de la contraseña de (?)
-        public_key = self.crear_clave_publica(private_key)
-        # ciframos asimétricamente el voto con la clave pública
-        voto_cifrado = self.cifrar_asi(voto, public_key)
+
         # el voto cifrado se firma con la clave privada
         voto_cifr_firm = private_key.sign(
             voto_cifrado,
@@ -308,38 +324,86 @@ class AplicacionRegistro:
         )
         return voto_cifr_firm
 
-    def cifrar_asi(self, voto, public_key):
-        """Función que cifra asimetricamente el voto con la clave pública"""
-        voto_cifrado = public_key.encrypt(
-            voto,
+    def cifrar_asi(self, voto):
+        """Función que cifra asimetricamente el voto con la clave pública de super usuario"""
+        certificado_path = os.path.join(os.getcwd(), "Usuarios", "00000000A", "00000000Acert.pem")
+        # Lee el certificado y obtén la clave pública
+        with open(certificado_path, "rb") as f:
+            certificado_bytes = f.read()
+
+        certificado = x509.load_pem_x509_certificate(certificado_bytes, default_backend())
+        clave_publica = certificado.public_key()
+
+        # Datos a cifrar
+        message = voto.encode('utf-8')
+
+        # Cifra los datos con la clave pública
+        ciphertext = clave_publica.encrypt(
+            message,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
             )
         )
-        return voto_cifrado
+        return ciphertext
 
-    def descifrar_asi(self, voto_cifrado, public_key):
-        """Función que recibe un voto cifrado y lo descifra utilizando la clave pública"""
-        pass
-
-    def ver_firmar(self, voto_cifr_firm, private_key):
-        """Función que recibe un voto cifrado y firmado y comprueba la firma, devolviendo únicamente el voto cifrado"""
-        voto_cifrado = private_key.decrypt(
-            voto_cifr_firm,
+    def descifrar_asi(self,voto_cifrado):
+        """Función que recibe un voto cifrado asimetricamente y lo descifra utilizando la clave privada"""
+        directorio = "Usuarios"
+        ruta_usuarios = os.path.join(os.getcwd(), directorio,"00000000A")
+        archivo_clave_privada = os.path.join(ruta_usuarios, "00000000A.pem")
+        with open(archivo_clave_privada, "rb") as f:
+            loaded_private_key = serialization.load_pem_private_key(
+                f.read(),
+                password=self.clave.encode('utf-8'),  # Aquí puedes proporcionar la contraseña si la clave está cifrada
+                backend=default_backend()
+            )
+        voto_descif = loaded_private_key.decrypt(
+            voto_cifrado,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
-                )
             )
-        return voto_cifrado
+        )
+        return voto_descif
 
-    def crear_clave_publica(self, key):
-        """Función que genera una clave pública y otra privada para la firma de cada usuario"""
-        public_key = key.public_key()
-        return public_key
+    def ver_firmar(self,dni):
+        """Función que recibe un usuario ,voto cifrado y cifrado-firmado y comprueba la firma"""
+        usuario= self.buscar_usuario("votos-usuarios",dni)
+        clave_publica= self.obtener_clave_publica(dni)
+        try:
+            clave_publica.verify(
+                bytes.fromhex(usuario[2]),
+                bytes.fromhex(usuario[1]),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return True
+        except Exception as e:
+            print(f"Error al verificar la firma: {e}")
+            return False
+
+
+    def obtener_clave_publica(self, dni):
+        """Función que obtiene clave publica de certificado"""
+        certificado_path = os.path.join(os.getcwd(), "Usuarios", f"{dni}", f"{dni}cert.pem")
+        with open(certificado_path, "rb") as f:
+            certificado_bytes = f.read()
+        certificado = x509.load_pem_x509_certificate(certificado_bytes, default_backend())
+        clave_publica = certificado.public_key()
+
+        # Convierte la clave pública a su representación en bytes
+        """clave_publica_bytes = clave_publica.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )"""
+
+        return clave_publica
 
     def crear_clave_privada(self,dni):
         """Función que genera la clave privada"""
@@ -358,7 +422,7 @@ class AplicacionRegistro:
         pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.BestAvailableEncryption(b'mypassword')
+            encryption_algorithm=serialization.BestAvailableEncryption(self.clave.encode('utf-8'))
         )
         with open(ruta_completa, 'wb') as archivo_nuevo:
             archivo_nuevo.write(pem)
@@ -384,7 +448,7 @@ class AplicacionRegistro:
         with open(archivo_clave_privada, "rb") as f:
             loaded_private_key = serialization.load_pem_private_key(
                 f.read(),
-                password=b"mypassword",  # Aquí puedes proporcionar la contraseña si la clave está cifrada
+                password=self.clave.encode('utf-8'),  # Aquí puedes proporcionar la contraseña si la clave está cifrada
                 backend=default_backend()
             )
         # Generate a CSR
@@ -467,6 +531,29 @@ class AplicacionRegistro:
         shutil.copy(ultimo_certificado, ruta_destino)
         print(f"Certificado copiado a {ruta_destino}")
 
+    def verificar_certificado(self, dni):
+        # Cargar el certificado del archivo
+        certificado_path=os.path.join(os.getcwd(),"Usuarios",f"{dni}",f"{dni}cert.pem")
+        ca_cert_path=os.path.join(os.getcwd(),"PKI","AC1","ac1cert.pem")
+        try:
+            # Construir el comando 'openssl verify'
+            comando = f"openssl verify -CAfile {ca_cert_path} {certificado_path}"
+
+            # Ejecutar el comando en el sistema operativo
+            proceso = subprocess.run(comando, shell=True, check=True, text=True, capture_output=True)
+
+            # Imprimir la salida del comando
+            print(f"Salida del comando:\n{proceso.stdout}")
+
+            # Verificar si el certificado es válido
+            if "OK" in proceso.stdout:
+                print("El certificado es válido.")
+            else:
+                print("El certificado no es válido.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error al ejecutar el comando 'openssl verify': {e}")
+            print(f"Error del comando:\n{e.stderr}")
+
 
     def abrir_ventana_registro(self):
         """Interfaz de la ventana de registro de usuario"""
@@ -539,6 +626,7 @@ class AplicacionRegistro:
             self.generar_solicitud_certificado(dni)
             self.generar_certificado(dni)
             self.copiar_ultimo_certificado(dni)
+            self.verificar_certificado(dni)
             self.ventana_registro.destroy()
 
 
