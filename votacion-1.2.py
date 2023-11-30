@@ -28,17 +28,44 @@ class AplicacionRegistro:
         self.nombre_basedatos='basedatos.csv'
         self.base_panda=pd.read_csv(self.nombre_basedatos)
         #Interfaz de la venta de inicio sesion
-        self.ventana = ventana
+        self.ventana= ventana
+        self.ventana_password_autoridad()
+
+        #variable temporal que guarda el valor de la contraseña del usuario
+        self.clave = None
+        self.clave_autoridad=None
+    def ventana_password_autoridad(self):
+        self.ventana.withdraw()
+        self.ventana_pass = tk.Toplevel(self.ventana)
+        self.ventana_pass.title("Contraseña autoridad")
+        contrasena_label = tk.Label(self.ventana_pass, text="Contraseña AC1:")
+        contrasena_entry = tk.Entry(self.ventana_pass, show="*")
+        mensaje_error = tk.Label(self.ventana_pass, text="", fg="red")
+        iniciar_app_button = tk.Button(self.ventana_pass, text="Enviar", command=lambda: self.verificar_pass_AC1(contrasena_entry, mensaje_error))
+        contrasena_label.grid(row=1, column=0)
+        contrasena_entry.grid(row=1, column=1)
+        iniciar_app_button.grid(row=2, column=0, columnspan=2)
+        mensaje_error.grid(rows=5, column=0, columnspan=2)
+    def verificar_pass_AC1(self, contrasena_entry,mensaje_error):
+        if self.is_valid_password(contrasena_entry.get()):
+            mensaje_error.config(text="")
+            self.clave_autoridad= contrasena_entry.get()
+            self.ventana_pass.destroy()
+            self.ventana.deiconify()
+            self.ventana_inicio_sesion()
+        else:
+            mensaje_error.config(text="Contraseña incorrecta")
+
+    def ventana_inicio_sesion(self):
         self.ventana.title("Aplicación de Inicio de Sesión")
-        self.dni_label = tk.Label(ventana, text="DNI:")
-        self.dni_entry = tk.Entry(ventana)
-        self.contrasena_label = tk.Label(ventana, text="Contraseña:")
-        self.contrasena_entry = tk.Entry(ventana, show="*")
-        self.mensaje_error = tk.Label(ventana, text="", fg="red")
+        self.dni_label = tk.Label(self.ventana, text="DNI:")
+        self.dni_entry = tk.Entry(self.ventana)
+        self.contrasena_label = tk.Label(self.ventana, text="Contraseña:")
+        self.contrasena_entry = tk.Entry(self.ventana, show="*")
+        self.mensaje_error = tk.Label(self.ventana, text="", fg="red")
 
-        self.iniciar_sesion_button = tk.Button(ventana, text="Iniciar Sesión", command=self.iniciar_sesion)
-        self.registrarse_button = tk.Button(ventana, text="Registrarse", command=self.abrir_ventana_registro)
-
+        self.iniciar_sesion_button = tk.Button(self.ventana, text="Iniciar Sesión", command=self.iniciar_sesion)
+        self.registrarse_button = tk.Button(self.ventana, text="Registrarse", command=self.abrir_ventana_registro)
 
         self.dni_label.grid(row=0, column=0)
         self.dni_entry.grid(row=0, column=1)
@@ -47,8 +74,6 @@ class AplicacionRegistro:
         self.iniciar_sesion_button.grid(row=2, column=0, columnspan=2)
         self.registrarse_button.grid(row=3, column=0, columnspan=2)
         self.mensaje_error.grid(rows=5, column=0, columnspan=2)
-        #variable temporal que guarda el valor de la contraseña del usuario
-        self.clave = None
 
     def iniciar_sesion(self):
         """Comprobacion del DNI y la contraseña que se introduce"""
@@ -133,7 +158,8 @@ class AplicacionRegistro:
 
 
         for index, row in base_votos.iterrows():
-            if (self.ver_firmar(row["dni"])):
+            #Verificamos el certificado del usuario y el voto firmado
+            if (self.verificar_certificado(row["dni"]) and self.ver_firmar(row["dni"])):
                 voto_bytes = self.descifrar_asi(bytes.fromhex(row["voto_cif_asi"]))
                 voto = voto_bytes.decode()
                 self.tree.insert("", index, values=(row["dni"],voto))
@@ -516,7 +542,7 @@ class AplicacionRegistro:
             resultado = subprocess.run(
                 comando,
                 shell=True,
-                input="marinakevin2023\ny\ny\n",
+                input=f"{self.clave_autoridad}\ny\ny\n",
                 text=True,
                 capture_output=True,
                 check=True
@@ -577,11 +603,30 @@ class AplicacionRegistro:
             # Verificar si el certificado es válido
             if "OK" in proceso.stdout:
                 print("El certificado es válido.")
+                return True
             else:
                 print("El certificado no es válido.")
+                return False
         except subprocess.CalledProcessError as e:
             print(f"Error al ejecutar el comando 'openssl verify': {e}")
             print(f"Error del comando:\n{e.stderr}")
+            return False
+
+    def is_valid_password(self, password):
+        private_key_path = os.path.join(os.getcwd(), "PKI", "AC1", "privado","ca1key.pem")
+        try:
+            with open(private_key_path, "rb") as key_file:
+                # Intentar cargar la clave privada sin descifrar completamente
+                serialization.load_pem_private_key(
+                    key_file.read(),
+                    password=password.encode(),
+                    backend=default_backend()
+                )
+            # Si no hay excepciones, la contraseña es válida
+            return True
+        except ValueError:
+            # Si hay una excepción, la contraseña no es válida
+            return False
 
 
     def abrir_ventana_registro(self):
@@ -655,7 +700,7 @@ class AplicacionRegistro:
             self.generar_solicitud_certificado(dni)
             self.generar_certificado(dni)
             self.copiar_ultimo_certificado(dni)
-            self.verificar_certificado(dni)
+            correcto=self.verificar_certificado(dni)
             self.ventana_registro.destroy()
 
 
