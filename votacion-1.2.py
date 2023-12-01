@@ -27,7 +27,6 @@ class AplicacionRegistro:
         #Nombre de la base de datos
         self.nombre_basedatos='basedatos.csv'
         self.base_panda=pd.read_csv(self.nombre_basedatos)
-        #Interfaz de la venta de inicio sesion
         self.ventana= ventana
         self.ventana_password_autoridad()
 
@@ -144,7 +143,6 @@ class AplicacionRegistro:
         self.ventana_sup.title("Ver votos")
         base_votos= pd.read_csv("votos-usuarios.csv")
         self.tree= ttk.Treeview(self.ventana_sup)
-        columna_mostrar= "dni"
         # Configurar columnas
         columnas_mostrar = ["dni", "voto"]  # Agrega "voto" a las columnas a mostrar
         self.tree["columns"] = tuple(columnas_mostrar)
@@ -359,7 +357,7 @@ class AplicacionRegistro:
 
     def firmar(self, voto_cifrado, dni):
         """Función para firmar con la clave privada"""
-        # La clave privada se encuentra en un fichero .pem -> la buscamos (key loading)
+        # La clave privada se encuentra en un fichero .pem
         con_path = os.path.join(os.getcwd(), "Usuarios", f"{dni}", f"{dni}.pem")
         with open(con_path, "rb") as key_file:
             private_key = serialization.load_pem_private_key(
@@ -382,17 +380,14 @@ class AplicacionRegistro:
     def cifrar_asi(self, voto):
         """Función que cifra asimetricamente el voto con la clave pública de super usuario"""
         certificado_path = os.path.join(os.getcwd(), "Usuarios", "00000000A", "00000000Acert.pem")
-        # Lee el certificado y obtén la clave pública
+        # Lee el certificado y obtiene la clave pública
         with open(certificado_path, "rb") as f:
             certificado_bytes = f.read()
-
         certificado = x509.load_pem_x509_certificate(certificado_bytes, default_backend())
         clave_publica = certificado.public_key()
-
-        # Datos a cifrar
+        # voto a cifrar
         message = voto.encode('utf-8')
-
-        # Cifra los datos con la clave pública
+        # Cifra los datos con la clave pública del super usuario
         ciphertext = clave_publica.encrypt(
             message,
             padding.OAEP(
@@ -411,7 +406,7 @@ class AplicacionRegistro:
         with open(archivo_clave_privada, "rb") as f:
             loaded_private_key = serialization.load_pem_private_key(
                 f.read(),
-                password=self.clave.encode('utf-8'),  # Aquí puedes proporcionar la contraseña si la clave está cifrada
+                password=self.clave.encode('utf-8'),
                 backend=default_backend()
             )
         voto_descif = loaded_private_key.decrypt(
@@ -473,7 +468,6 @@ class AplicacionRegistro:
         ruta_usuarios = os.path.join(os.getcwd(), directorio, nombre_dir)
         ruta_completa = os.path.join(ruta_usuarios, nombre_archivo)
         #La almacenamos en un fichero .pem para cada usuario. El nombre del archivo es <dni>.pem
-        # hay tres tipos -> decidir cuál vamos a usar; este es el primero
         pem = private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
@@ -506,9 +500,8 @@ class AplicacionRegistro:
                 password=self.clave.encode('utf-8'),  # Aquí puedes proporcionar la contraseña si la clave está cifrada
                 backend=default_backend()
             )
-        # Generate a CSR
+        # Genera a CSR
         csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-            # Provide various details about who we are.
             x509.NameAttribute(NameOID.COUNTRY_NAME, "ES"),
             x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "MADRID"),
             x509.NameAttribute(NameOID.LOCALITY_NAME, "Madrid"),
@@ -516,15 +509,13 @@ class AplicacionRegistro:
             x509.NameAttribute(NameOID.COMMON_NAME, f"{dni}.com"),
         ])).add_extension(
             x509.SubjectAlternativeName([
-                # Describe what sites we want this certificate for.
                 x509.DNSName(f"{dni}.com"),
                 x509.DNSName(f"www.{dni}.com"),
                 x509.DNSName(f"subdomain.{dni}.com"),
             ]),
             critical=False,
-            # Sign the CSR with our private key.
+            # Firma del CSR con nuestra clave privada
         ).sign(loaded_private_key, hashes.SHA256())
-        # Write our CSR out to disk.
         with open(archivo_solicitud, "wb") as f:
             f.write(csr.public_bytes(serialization.Encoding.PEM))
         ruta_solicitud= os.path.join(os.getcwd(), "PKI", "AC1","solicitudes",nombre_solicitud)
@@ -678,7 +669,6 @@ class AplicacionRegistro:
         contrasena = self.contrasena_registro_entry.get()
         # se generan automáticamente las claves pública y privada
         # la segunda se guardará en un fichero .pem, pero esto se hace al generarse la clave en sí
-        # TODO: la primera se guardará en claves-publicas.csv
         #Hace comprobacione
         if nombre != "" and apellido != "" and self.comprobar_fecha() and self.comprobar_dni() and self.comprobar_contrasena():
             #Asigna la contraseña de registro al atributo clave para poder encriptar los datos antes de almacenarlos
